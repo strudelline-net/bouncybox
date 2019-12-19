@@ -1,0 +1,166 @@
+Parameters:
+  Username:
+    Type: String
+    Default: james
+  GithubUsername:
+    Type: String
+    Default: jamesandariese
+  ClientIp:
+    Type: String
+  WorkspaceIp:
+    Type: String
+  WorkspaceTunnelSSHPublicKey:
+    Type: String
+    Default: ssh-rsa AAAAB3NzaC1yc2EAAAABJQAAAQEAqDWebf3ULRE09LvquP4zoKCvWHZ0D8vjs1QFWn3Rs+tm6dhEWKRZJd6ATHs1tL1U13OPxNNfXm86CCXTS0RK4hEOZTN6UN5HZKIBcaBJMNPJAzOaRIBNzHd/XTMsbTAx/uQ0poUOxfLAiiZRS0bjt7iQ3hqF6E0doaDoSmfWuFFlf+joYVOKoYqn7iZWqouorLt/E563WLSxm/0yA/+yvoRPi/sB1xu+xc5eP1ojmkrumVKZ/dHzAgM6wN2Dsdxvwi2uvjtePeE8pSunwOFri7rj7Qfk5jaC4zkKiPcuVd4zwRlMNmmYMdOOO5tM5AYf/WurQKv+7mdZLzmY4trzsQ== rsa-key-20191218
+Resources:
+  BouncyBoxVPCDC8C10B8:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: bouncybox/BouncyBoxVPC
+  BouncyBoxVPCBouncyBoxPublicSubnetSubnet1Subnet65DEEA93:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 10.0.0.0/17
+      VpcId:
+        Ref: BouncyBoxVPCDC8C10B8
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: ""
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: bouncybox/BouncyBoxVPC/BouncyBoxPublicSubnetSubnet1
+        - Key: aws-cdk:subnet-name
+          Value: BouncyBoxPublicSubnet
+        - Key: aws-cdk:subnet-type
+          Value: Public
+  BouncyBoxVPCBouncyBoxPublicSubnetSubnet1RouteTableC17BA32B:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: BouncyBoxVPCDC8C10B8
+      Tags:
+        - Key: Name
+          Value: bouncybox/BouncyBoxVPC/BouncyBoxPublicSubnetSubnet1
+  BouncyBoxVPCBouncyBoxPublicSubnetSubnet1RouteTableAssociationE86A1CF2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: BouncyBoxVPCBouncyBoxPublicSubnetSubnet1RouteTableC17BA32B
+      SubnetId:
+        Ref: BouncyBoxVPCBouncyBoxPublicSubnetSubnet1Subnet65DEEA93
+  BouncyBoxVPCBouncyBoxPublicSubnetSubnet1DefaultRoute9CB5F3F4:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: BouncyBoxVPCBouncyBoxPublicSubnetSubnet1RouteTableC17BA32B
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: BouncyBoxVPCIGWE581ACF0
+    DependsOn:
+      - BouncyBoxVPCVPCGW15C7488B
+  BouncyBoxVPCBouncyBoxPublicSubnetSubnet1EIPB62992A4:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: bouncybox/BouncyBoxVPC/BouncyBoxPublicSubnetSubnet1
+  BouncyBoxVPCBouncyBoxPublicSubnetSubnet1NATGateway90E06E99:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+          - BouncyBoxVPCBouncyBoxPublicSubnetSubnet1EIPB62992A4
+          - AllocationId
+      SubnetId:
+        Ref: BouncyBoxVPCBouncyBoxPublicSubnetSubnet1Subnet65DEEA93
+      Tags:
+        - Key: Name
+          Value: bouncybox/BouncyBoxVPC/BouncyBoxPublicSubnetSubnet1
+  BouncyBoxVPCIGWE581ACF0:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: bouncybox/BouncyBoxVPC
+  BouncyBoxVPCVPCGW15C7488B:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: BouncyBoxVPCDC8C10B8
+      InternetGatewayId:
+        Ref: BouncyBoxVPCIGWE581ACF0
+  BouncyBox967DFFAA:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0a7d051a1c4b54f65
+      InstanceType: t3.nano
+      SecurityGroupIds:
+        - Fn::GetAtt: ["BouncyBoxSecurityGroup91229420", "GroupId"]
+      SubnetId:
+        Ref: BouncyBoxVPCBouncyBoxPublicSubnetSubnet1Subnet65DEEA93
+      Tags:
+        - Key: Name
+          Value: bouncybox
+      UserData:
+        Fn::Base64: !Sub |
+            #cloud-config
+
+            manage_resolv_conf: true
+            resolv_conf:
+              nameservers: ['8.8.4.4', '8.8.8.8']
+              options:
+                rotate: true
+                timeout: 1
+            users:
+              - default
+              - name: ${Username}
+                sudo: ALL=(ALL) NOPASSWD:ALL
+                ssh_import_id: gh:${GithubUsername}
+              - name: workspacetunnel
+                ssh_authorized_keys:
+                  - ${WorkspaceTunnelSSHPublicKey}
+            runcmd:
+             - "sed -i -e 's/^#\\?GatewayPorts .*$/GatewayPorts yes/' /etc/ssh/sshd_config"
+             - "systemctl restart sshd"
+  BouncyBoxEIP:
+    Type: AWS::EC2::EIP
+  BouncyBoxEIPAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt BouncyBoxEIP.AllocationId
+      InstanceId: !Ref BouncyBox967DFFAA
+  BouncyBoxSecurityGroup91229420:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow ssh and rdp from client IP and ssh from workspace
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: "-1"
+      SecurityGroupIngress:
+        - CidrIp: !Sub "${WorkspaceIp}/32"
+          Description: allow ssh from workspace
+          FromPort: 22
+          IpProtocol: tcp
+          ToPort: 22
+        - CidrIp: !Sub "${ClientIp}/32"
+          Description: allow ssh from client
+          FromPort: 22
+          IpProtocol: tcp
+          ToPort: 22
+        - CidrIp: !Sub "${ClientIp}/32"
+          Description: allow rdp from client
+          FromPort: 3389
+          IpProtocol: tcp
+          ToPort: 3389
+      VpcId:
+        Ref: BouncyBoxVPCDC8C10B8
